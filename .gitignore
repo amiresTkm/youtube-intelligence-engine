@@ -216,3 +216,17 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Virtual environment
+venv/
+
+# API Keys
+.env
+*.env
+
+# Data files (too large for git)
+data/raw/
+data/processed/
+
+# MLflow experiment tracking output
+mlruns/

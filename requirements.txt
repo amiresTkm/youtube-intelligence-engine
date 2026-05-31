@@ -13,3 +13,4 @@ langchain-community
 mlflow
 streamlit
 tqdm
+youtube-transcript-api

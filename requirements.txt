@@ -1,0 +1,15 @@
+google-api-python-client
+python-dotenv
+pandas
+nltk
+spacy
+textblob
+transformers
+torch
+bertopic
+chromadb
+langchain
+langchain-community
+mlflow
+streamlit
+tqdm

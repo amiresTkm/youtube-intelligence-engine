@@ -225,10 +225,16 @@ venv/
 *.env
 
 # Data files (too large for git)
+# Data files
 data/raw/*.json
 data/raw/*.csv
 data/processed/*.json
 data/processed/*.csv
+data/processed/*.npy
+data/processed/*.png
+data/processed/chromadb/
+data/processed/topic_model/
+mlruns/
 
 # MLflow experiment tracking output
 mlruns/

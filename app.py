@@ -243,7 +243,15 @@ elif page == "💬 Ask the System":
             ["Hybrid (Recommended)", "Semantic", "MMR (Diverse)", "Negative Only", "Positive Only"]
         )
     with col_k:
-        k = st.slider("Number of comments to retrieve:", min_value=3, max_value=10, value=5)
+        if strategy == "Hybrid (Recommended)":
+            # hybrid has fixed k per collection - letting users increase k here
+            # would add lower-quality documents and weaken the answer
+            st.info("Hybrid uses 3 comments + 3 transcript chunks + 2 summaries (fixed).")
+            k = 3
+        else:
+            k = st.slider("Number of comments to retrieve:", min_value=3, max_value=7, value=5)
+            if k > 5:
+                st.caption("Higher values include less relevant comments and may reduce answer quality.")
 
     if st.button("🔍 Search & Answer", type="primary") and question:
         with st.spinner("Retrieving context and generating answer..."):

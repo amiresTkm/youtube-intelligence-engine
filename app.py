@@ -43,6 +43,17 @@ def load_data():
     df["keywords_parsed"] = df["keywords"].apply(ast.literal_eval)
     return df
 
+@st.cache_resource
+def load_bm25():
+    """Cache BM25 index at startup - builds once, stays in memory."""
+    from rank_bm25 import BM25Okapi
+    df_temp = pd.read_csv("data/processed/comments_enriched.csv")
+    texts = df_temp["text"].tolist()
+    index = BM25Okapi([t.lower().split() for t in texts])
+    return index, texts
+
+bm25_index, bm25_texts = load_bm25()
+
 embedder, llm, comments_col, transcripts_col, summaries_col = load_models()
 df = load_data()
 
@@ -238,26 +249,75 @@ elif page == "💬 Ask the System":
 
     col_strat, col_k = st.columns(2)
     with col_strat:
-        strategy = st.selectbox(
+        strategy_choice = st.selectbox(
             "Retrieval strategy:",
-            ["Hybrid (Recommended)", "Semantic", "MMR (Diverse)", "Negative Only", "Positive Only"]
+            ["Auto (Query Analysis)", "Hybrid", "Semantic", "MMR (Diverse)", 
+             "Negative Only", "Positive Only", "BM25 (Keyword)"],
+            index=0
         )
     with col_k:
-        if strategy == "Hybrid (Recommended)":
-            # hybrid has fixed k per collection - letting users increase k here
-            # would add lower-quality documents and weaken the answer
-            st.info("Hybrid uses 3 comments + 3 transcript chunks + 2 summaries (fixed).")
-            k = 3
-        else:
-            k = st.slider("Number of comments to retrieve:", min_value=3, max_value=7, value=5)
-            if k > 5:
-                st.caption("Higher values include less relevant comments and may reduce answer quality.")
+        k = st.slider("Number of comments to retrieve:", min_value=3, max_value=7, value=5)
+        if k > 5:
+            st.caption("Higher values include less relevant comments and may reduce answer quality.")
 
     if st.button("🔍 Search & Answer", type="primary") and question:
+        # step 1: analyze the query before retrieval
+        with st.spinner("Analyzing query..."):
+            analysis_prompt = f"""Analyze this query and respond in JSON only:
+    {{"intent": "one of: factual_qa, sentiment_inquiry, topic_exploration, entity_search, summarization",
+    "entities_mentioned": ["list companies, people, AI tools mentioned or empty list"],
+    "sentiment_requested": "one of: any, positive, negative, neutral",
+    "reasoning": "one sentence"}}
+
+    Query: {question}"""
+        try:
+            analysis_response = llm.invoke(analysis_prompt)
+            text = analysis_response.content.strip()
+            analysis = json.loads(text[text.find("{"):text.rfind("}")+1])
+        except:
+            analysis = {"intent": "factual_qa", "entities_mentioned": [],
+                       "sentiment_requested": "any", "reasoning": "defaulting to general QA"}
+
+        # map intent to retrieval strategy
+        intent_to_strategy = {
+            "entity_search":     "BM25 (Keyword)",
+            "sentiment_inquiry": "Semantic",
+            "topic_exploration": "Hybrid",
+            "summarization":     "Hybrid",
+            "factual_qa":        "Hybrid"
+        }
+
+        if strategy_choice == "Auto (Query Analysis)":
+            strategy = intent_to_strategy.get(
+                analysis.get("intent", "factual_qa"),
+                "Hybrid"
+            )
+            auto_selected = True
+        else:
+            strategy = strategy_choice
+            auto_selected = False
+
+        # show query analysis visibly before retrieval
+        with st.expander("🧠 Query Analysis", expanded=True):
+            col_a, col_b, col_c = st.columns(3)
+            col_a.metric("Intent", analysis.get("intent", "factual_qa"))
+            col_b.metric("Entities Found", len(analysis.get("entities_mentioned", [])))
+            col_c.metric("Sentiment Filter", analysis.get("sentiment_requested", "any"))
+            if analysis.get("entities_mentioned"):
+                st.caption(f"Entities detected: {', '.join(analysis.get('entities_mentioned', []))}")
+                st.caption(f"Reasoning: {analysis.get('reasoning', '')}")
+            if auto_selected:
+                st.info(f"Auto-selected strategy: **{strategy}** based on detected intent")
+            else:
+                st.info(f"Using manually selected strategy: **{strategy}**")
+
+        # step 2: retrieve and generate
+
         with st.spinner("Retrieving context and generating answer..."):
 
             # retrieve based on strategy
-            if strategy == "Hybrid (Recommended)":
+            if strategy == "Hybrid":
+                k = 3
                 comment_docs, comment_meta, transcript_docs, _, summary_docs = hybrid_retrieval(question, k_each=k)
             elif strategy == "MMR (Diverse)":
                 comment_docs, comment_meta = mmr_retrieval(question, k=k)
@@ -276,6 +336,20 @@ elif page == "💬 Ask the System":
                     filter_dict={"sentiment": {"$eq": "positive"}}
                 )
                 transcript_docs, _ = semantic_retrieval(question, transcripts_col, k=3)
+                summary_docs, _ = semantic_retrieval(question, summaries_col, k=2)
+            elif strategy == "BM25 (Keyword)":
+                # lexical retrieval - finds comments containing exact query terms
+                import numpy as np
+                scores = bm25_index.get_scores(question.lower().split())
+                top_indices = np.argsort(scores)[::-1][:k]
+                comment_docs = [bm25_texts[i] for i in top_indices]
+                comment_meta = [{"video_name": df.iloc[i]["video_name"],
+                                "sentiment": df.iloc[i]["sentiment"],
+                                "topic_name": df.iloc[i]["topic_name"],
+                                "likes": int(df.iloc[i]["likes"]),
+                                "confidence": float(df.iloc[i]["confidence"])}
+                                for i in top_indices]
+                transcript_docs, _ = semantic_retrieval(question, transcripts_col, k=2)
                 summary_docs, _ = semantic_retrieval(question, summaries_col, k=2)
             else:  # Semantic
                 comment_docs, comment_meta = semantic_retrieval(question, comments_col, k=k)

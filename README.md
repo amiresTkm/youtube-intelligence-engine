@@ -14,7 +14,7 @@ The main finding: the dataset is about 50% negative sentiment, but that's becaus
 
 - Scraping: YouTube Data API v3, `youtube-transcript-api`
 - NLP: spaCy, RoBERTa (`cardiffnlp/twitter-roberta-base-sentiment-latest`), BERTopic, KeyBERT, GLiNER
-- RAG: ChromaDB, LangChain, LangGraph
+- RAG: ChromaDB (3 collections), LangChain, LangGraph, BM25 lexical retrieval
 - LLM: Groq (`llama-3.3-70b-versatile`)
 - Tracking: MLflow
 - Dashboard: Streamlit
@@ -64,6 +64,8 @@ Run the notebooks in this order. Each one depends on the output of the one befor
 
 Note: the numbering looks out of order because `02b` and `02c` actually run after `04`. They need the topic labels that notebook 4 produces. They're named that way because they belong conceptually with preprocessing, not because of when they run.
 
+The dashboard includes automatic query analysis that routes each question to the most appropriate retrieval strategy based on detected intent.
+
 Then start the dashboard:
 ```bash
 streamlit run app.py
@@ -84,6 +86,7 @@ mlflow ui --backend-store-uri sqlite:///mlruns/mlflow.db
 - 92 topics found with BERTopic (outlier rate dropped from 45.6% to 0.3% after tuning)
 - 1,113 unique entities extracted
 - Average retrieval relevance: 0.79 out of 1.0
+- Retrieval strategies implemented: Semantic, MMR, Metadata-filtered (sentiment/entity), BM25 lexical, Hybrid (multi-collection)
 - MMR retrieval is about 9.6% more diverse than plain semantic retrieval
 - LLM-as-judge scores: 5/5 faithfulness, 5/5 relevance, 4.4/5 completeness on test questions. Also tested the judge against a deliberately wrong, made-up answer to make sure it actually catches mistakes — it correctly scored that one 1/5.
 

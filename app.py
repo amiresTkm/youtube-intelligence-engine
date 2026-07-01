@@ -13,6 +13,11 @@ from langchain_groq import ChatGroq
 from langchain_core.prompts import ChatPromptTemplate
 from collections import Counter
 
+import mlflow
+mlflow.set_tracking_uri("sqlite:///mlruns/mlflow.db")
+mlflow.set_experiment("youtube-intelligence-engine-dashboard")
+mlflow.langchain.autolog()
+
 # ── page config - must be first streamlit call ──
 st.set_page_config(
     page_title="YouTube Intelligence Engine",
@@ -357,8 +362,19 @@ elif page == "💬 Ask the System":
                 summary_docs, _ = semantic_retrieval(question, summaries_col, k=2)
 
             # generate answer
-            answer = generate_answer(question, comment_docs, transcript_docs, summary_docs)
-
+            with mlflow.start_run(run_name=f"dashboard_{question[:30]}"):
+                mlflow.log_param("question", question)
+                mlflow.log_param("strategy", strategy)
+                mlflow.log_param("k", k)
+                mlflow.log_param("auto_selected", auto_selected)
+                mlflow.log_param("detected_intent", analysis.get("intent", "unknown"))
+                mlflow.log_param("entities_found", str(analysis.get("entities_mentioned", [])))
+    
+                answer = generate_answer(question, comment_docs, transcript_docs, summary_docs)
+    
+                mlflow.log_metric("comments_retrieved", len(comment_docs))
+                mlflow.log_text(answer, "answer.txt")
+                
         # display answer
         st.markdown("### 🤖 Answer")
         st.info(answer)

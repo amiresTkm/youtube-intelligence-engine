@@ -76,6 +76,8 @@ To view experiment tracking:
 mlflow ui --backend-store-uri sqlite:///mlruns/mlflow.db
 ```
 
+MLflow automatically logs every query made through the dashboard, all RAG pipeline test runs, agent routing decisions, and evaluation metrics. All experiments are stored locally in `mlruns/mlflow.db`.
+
 ## Dataset
 
 8 YouTube videos covering different angles on AI and jobs — some pessimistic, some optimistic, some focused on economics (capitalism, UBI) and some on developers specifically. About 27,330 comments after cleaning, plus 8 full video transcripts.
